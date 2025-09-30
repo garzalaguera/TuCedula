@@ -127,11 +127,42 @@ function renderModules(modules) {
     const icon = getModuleIcon(mod.key);
     const desc = moduleDescription(mod.key);
     
+    // Obtener estadísticas del localStorage
+    const progress = getModuleProgress(mod.key);
+    
+    // Construir HTML con estadísticas
+    let statsHTML = '';
+    if (progress) {
+      statsHTML = `
+        <div class="module-progress">
+          <div class="progress-info">
+            <span class="progress-label">Promedio</span>
+            <span class="progress-value">${progress.avgScore}%</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" style="width: ${progress.avgScore}%"></div>
+          </div>
+        </div>
+      `;
+    }
+    
+    let lastScoreHTML = '';
+    if (progress && progress.lastScore !== undefined) {
+      lastScoreHTML = `
+        <div class="last-score">
+          <div class="last-score-label">Última</div>
+          <div class="last-score-value">${progress.lastScore}%</div>
+        </div>
+      `;
+    }
+    
     card.innerHTML = `
+      ${lastScoreHTML}
       <div class="module-icon">${icon}</div>
       <div class="module-title">${mod.title}</div>
       <div class="module-description">${desc}</div>
       <div class="module-stats">${mod.count} preguntas disponibles</div>
+      ${statsHTML}
     `;
 
     card.addEventListener('click', () => {
@@ -196,6 +227,47 @@ function subtopicStats(module) {
     return { subtopic: sub, total: v.total, accuracy: acc, weight: w };
   });
 }
+
+function getModuleProgress(module) {
+  const key = historyKey(module);
+  const history = JSON.parse(localStorage.getItem(key) || '[]');
+  
+  if (history.length === 0) return null;
+  
+  // Calcular última calificación (del último quiz completo)
+  const lastScore = history[0]?.score;
+  
+  // Calcular promedio de últimas 10 sesiones
+  const recentScores = [];
+  let currentQuizId = null;
+  const quizScores = {};
+  
+  history.forEach(entry => {
+    const quizId = Math.floor(entry.ts / 300000); // Agrupa por sesiones de 5 min
+    if (!quizScores[quizId]) {
+      quizScores[quizId] = { correct: 0, total: 0 };
+    }
+    quizScores[quizId].total += 1;
+    quizScores[quizId].correct += entry.correct ? 1 : 0;
+  });
+  
+  // Convertir a array de scores
+  Object.values(quizScores).slice(0, 10).forEach(quiz => {
+    const score = Math.round((quiz.correct / quiz.total) * 100);
+    recentScores.push(score);
+  });
+  
+  const avgScore = recentScores.length > 0 
+    ? Math.round(recentScores.reduce((a, b) => a + b, 0) / recentScores.length)
+    : 0;
+  
+  return {
+    lastScore: lastScore,
+    avgScore: avgScore,
+    totalQuestions: history.length
+  };
+}
+
 
 // === Question Selection ===
 function nextBatchFromModule(module, size) {
@@ -413,14 +485,21 @@ function finishQuiz() {
   const total = sessionQuestions.length;
   const pct = Math.round((score.correct / total) * 100);
   
+  // Guardar el score de esta sesión en el primer elemento del historial
+  const key = historyKey(currentModule);
+  const history = JSON.parse(localStorage.getItem(key) || '[]');
+  if (history.length > 0) {
+    history[0].score = pct; // Agregar score al primer elemento
+    localStorage.setItem(key, JSON.stringify(history));
+  }
+  
   finalScore.textContent = `${pct}%`;
   performanceMessage.textContent = getPerformanceMessage(pct);
 
   // Detailed results
   const agg = {};
   const lastIds = new Set(sessionQuestions.map(q => q.id));
-  const hist = JSON.parse(localStorage.getItem(historyKey(currentModule)) || '[]')
-    .filter(h => lastIds.has(h.id));
+  const hist = history.filter(h => lastIds.has(h.id));
 
   hist.forEach(h => {
     const s = h.subtopic || 'General';
