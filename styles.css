@@ -211,8 +211,32 @@ body {
 
 /* === Screens === */
 .screen {
-  display: none;
+  display: none !important;
   animation: fadeIn 300ms ease;
+}
+
+.screen.active {
+  display: flex !important;
+}
+
+.loading-screen.active {
+  display: flex !important;
+}
+
+.error-screen.active {
+  display: flex !important;
+}
+
+.start-screen.active {
+  display: flex !important;
+}
+
+.question-screen.active {
+  display: flex !important;
+}
+
+.end-screen.active {
+  display: flex !important;
 }
 
 @keyframes fadeIn {
