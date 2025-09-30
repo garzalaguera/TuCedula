@@ -80,6 +80,9 @@ function shuffleOptions(q) {
 // === Data Loading ===
 async function loadAll() {
   try {
+    // Mostrar loading
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    loadingScreen.classList.add('active');
     loadingScreen.style.display = 'flex';
     
     const [idxRes, allRes] = await Promise.all([
@@ -94,11 +97,20 @@ async function loadAll() {
 
     renderModules(QUESTIONS_INDEX.modules);
 
-    loadingScreen.style.display = 'none';
+    // Mostrar start screen
+    document.querySelectorAll('.screen').forEach(s => {
+      s.classList.remove('active');
+      s.style.display = 'none';
+    });
+    startScreen.classList.add('active');
     startScreen.style.display = 'flex';
   } catch (e) {
     console.error(e);
-    loadingScreen.style.display = 'none';
+    document.querySelectorAll('.screen').forEach(s => {
+      s.classList.remove('active');
+      s.style.display = 'none';
+    });
+    errorScreen.classList.add('active');
     errorScreen.style.display = 'flex';
   }
 }
@@ -249,8 +261,14 @@ function startQuiz() {
 
   sessionQuestions = nextBatchFromModule(currentModule, batchSize);
 
-  startScreen.style.display = 'none';
+  // Ocultar todo y mostrar solo question screen
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = 'none';
+  });
+  questionScreen.classList.add('active');
   questionScreen.style.display = 'flex';
+  
   updateStreakDisplay();
   renderQuestion();
 }
@@ -384,7 +402,12 @@ function nextQuestion() {
 }
 
 function finishQuiz() {
-  questionScreen.style.display = 'none';
+  // Ocultar todo y mostrar solo end screen
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = 'none';
+  });
+  endScreen.classList.add('active');
   endScreen.style.display = 'flex';
   
   const total = sessionQuestions.length;
@@ -424,8 +447,13 @@ function getPerformanceMessage(pct) {
 }
 
 function restart() {
-  endScreen.style.display = 'none';
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = 'none';
+  });
+  startScreen.classList.add('active');
   startScreen.style.display = 'flex';
+  
   currentModule = null;
   startBtn.disabled = true;
   document.querySelectorAll('.module-card').forEach(c => c.classList.remove('selected'));
