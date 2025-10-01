@@ -929,11 +929,13 @@ background: var(--text-muted);
   margin-top: 12px;
   display: flex;
   gap: 8px;
+  position: relative;
+  z-index: 10; /* Aumentar z-index */
 }
 
 .stats-btn {
   flex: 1;
-  padding: 6px 12px;
+  padding: 8px 12px; /* Aumentar padding para mejor click */
   font-size: 11px;
   font-weight: 600;
   border-radius: 6px;
@@ -942,26 +944,28 @@ background: var(--text-muted);
   transition: all var(--transition);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  position: relative;
+  z-index: 10; /* Asegurar que esté encima */
 }
 
 .stats-btn-detail {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  background: var(--primary);
+  color: white;
 }
 
 .stats-btn-detail:hover {
-  background: var(--primary-light);
-  color: var(--primary);
+  background: var(--primary-hover);
+  transform: translateY(-1px);
 }
 
 .stats-btn-reset {
-  background: var(--error-light);
-  color: var(--error);
+  background: var(--error);
+  color: white;
 }
 
 .stats-btn-reset:hover {
-  background: var(--error);
-  color: white;
+  background: #dc2626;
+  transform: translateY(-1px);
 }
 
 /* Modal for stats detail */
