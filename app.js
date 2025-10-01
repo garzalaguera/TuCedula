@@ -170,8 +170,13 @@ function renderModules(modules) {
       ${statsHTML}
     `;
 
+    // Click handler para la tarjeta (excluyendo botones)
     card.addEventListener('click', (e) => {
-      if (e.target.classList.contains('stats-btn')) return;
+      // Ignorar clicks en botones y sus contenedores
+      if (e.target.closest('.stats-btn') || e.target.closest('.stats-actions')) {
+        return;
+      }
+      
       document.querySelectorAll('.module-card').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
       currentModule = mod.key;
