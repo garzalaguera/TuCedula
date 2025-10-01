@@ -1,5 +1,4 @@
 // app.js – DuoSeguros Mejorado
-// Mantiene tu lógica original + integración con nuevo diseño
 
 // === Global State ===
 let QUESTIONS_ALL = {};
