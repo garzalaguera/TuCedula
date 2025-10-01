@@ -1,4 +1,4 @@
-// app.js – DuoSeguros Mejorado
+// app.js – DuoSeguros Mejorado con estadísticas completas
 
 // === Global State ===
 let QUESTIONS_ALL = {};
@@ -79,8 +79,10 @@ function shuffleOptions(q) {
 // === Data Loading ===
 async function loadAll() {
   try {
-    // Mostrar loading
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s => {
+      s.classList.remove('active');
+      s.style.display = 'none';
+    });
     loadingScreen.classList.add('active');
     loadingScreen.style.display = 'flex';
     
@@ -96,7 +98,6 @@ async function loadAll() {
 
     renderModules(QUESTIONS_INDEX.modules);
 
-    // Mostrar start screen
     document.querySelectorAll('.screen').forEach(s => {
       s.classList.remove('active');
       s.style.display = 'none';
@@ -114,7 +115,7 @@ async function loadAll() {
   }
 }
 
-// === Module Rendering ===
+// === Module Rendering with Stats ===
 function renderModules(modules) {
   moduleList.innerHTML = '';
   
@@ -125,13 +126,10 @@ function renderModules(modules) {
 
     const icon = getModuleIcon(mod.key);
     const desc = moduleDescription(mod.key);
-    
-    // Obtener estadísticas del localStorage
     const progress = getModuleProgress(mod.key);
     
-    // Construir HTML con estadísticas
     let statsHTML = '';
-    if (progress) {
+    if (progress && progress.totalQuestions > 0) {
       statsHTML = `
         <div class="module-progress">
           <div class="progress-info">
@@ -141,6 +139,14 @@ function renderModules(modules) {
           <div class="progress-bar-container">
             <div class="progress-bar-fill" style="width: ${progress.avgScore}%"></div>
           </div>
+        </div>
+        <div class="stats-actions">
+          <button class="stats-btn stats-btn-detail" onclick="showModuleStats(event, '${mod.key}')">
+            Ver detalles
+          </button>
+          <button class="stats-btn stats-btn-reset" onclick="resetModuleStats(event, '${mod.key}')">
+            Reset
+          </button>
         </div>
       `;
     }
@@ -164,7 +170,8 @@ function renderModules(modules) {
       ${statsHTML}
     `;
 
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      if (e.target.classList.contains('stats-btn')) return;
       document.querySelectorAll('.module-card').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
       currentModule = mod.key;
@@ -198,7 +205,7 @@ function moduleDescription(name) {
   return 'Preguntas sobre seguros';
 }
 
-// === Local Storage ===
+// === Local Storage & Statistics ===
 function historyKey(module) { return `qp_hist_${module}`; }
 function seenKey(module) { return `qp_seen_${module}`; }
 
@@ -207,6 +214,47 @@ function pushHistory(module, entry) {
   const arr = JSON.parse(localStorage.getItem(key) || '[]');
   arr.unshift(entry);
   localStorage.setItem(key, JSON.stringify(arr.slice(0, 100)));
+}
+
+function getModuleProgress(module) {
+  const key = historyKey(module);
+  const history = JSON.parse(localStorage.getItem(key) || '[]');
+  
+  if (history.length === 0) return null;
+  
+  // Get quiz sessions (grouped by timestamp proximity)
+  const sessions = [];
+  let currentSession = [];
+  let lastTs = null;
+  
+  history.forEach(entry => {
+    if (!lastTs || (lastTs - entry.ts) > 600000) { // 10 min gap = new session
+      if (currentSession.length > 0) sessions.push(currentSession);
+      currentSession = [entry];
+    } else {
+      currentSession.push(entry);
+    }
+    lastTs = entry.ts;
+  });
+  if (currentSession.length > 0) sessions.push(currentSession);
+  
+  // Calculate scores per session
+  const sessionScores = sessions.map(session => {
+    const correct = session.filter(e => e.correct).length;
+    return Math.round((correct / session.length) * 100);
+  });
+  
+  const lastScore = sessionScores[0] || 0;
+  const avgScore = sessionScores.length > 0
+    ? Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length)
+    : 0;
+  
+  return {
+    lastScore,
+    avgScore,
+    totalQuestions: history.length,
+    sessions: sessions.length
+  };
 }
 
 function subtopicStats(module) {
@@ -223,50 +271,97 @@ function subtopicStats(module) {
   return Object.entries(by).map(([sub, v]) => {
     const acc = v.total ? (v.correct / v.total) : 0.0;
     const w = 0.3 + (1.0 - acc) * 0.7;
-    return { subtopic: sub, total: v.total, accuracy: acc, weight: w };
+    const score = Math.round(acc * 100);
+    return { subtopic: sub, total: v.total, correct: v.correct, accuracy: acc, score, weight: w };
   });
 }
 
-function getModuleProgress(module) {
-  const key = historyKey(module);
-  const history = JSON.parse(localStorage.getItem(key) || '[]');
+// === Stats Modal Functions ===
+window.showModuleStats = function(event, moduleName) {
+  event.stopPropagation();
   
-  if (history.length === 0) return null;
+  const progress = getModuleProgress(moduleName);
+  const subtopics = subtopicStats(moduleName);
   
-  // Calcular última calificación (del último quiz completo)
-  const lastScore = history[0]?.score;
+  if (!progress) {
+    alert('No hay estadísticas disponibles para este módulo');
+    return;
+  }
   
-  // Calcular promedio de últimas 10 sesiones
-  const recentScores = [];
-  let currentQuizId = null;
-  const quizScores = {};
+  // Create modal
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay active';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Estadísticas - ${moduleName}</h2>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value">${progress.lastScore}%</div>
+          <div class="stat-label">Última sesión</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${progress.avgScore}%</div>
+          <div class="stat-label">Promedio</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${progress.sessions}</div>
+          <div class="stat-label">Sesiones</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${progress.totalQuestions}</div>
+          <div class="stat-label">Preguntas</div>
+        </div>
+      </div>
+      
+      <div class="subtopic-list">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 700;">Desempeño por subtema</h3>
+        ${subtopics.map(st => `
+          <div class="subtopic-item">
+            <div class="subtopic-header">
+              <span class="subtopic-name">${st.subtopic}</span>
+              <span class="subtopic-score">${st.score}% (${st.correct}/${st.total})</span>
+            </div>
+            <div class="subtopic-bar">
+              <div class="subtopic-bar-fill" style="width: ${st.score}%"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
   
-  history.forEach(entry => {
-    const quizId = Math.floor(entry.ts / 300000); // Agrupa por sesiones de 5 min
-    if (!quizScores[quizId]) {
-      quizScores[quizId] = { correct: 0, total: 0 };
-    }
-    quizScores[quizId].total += 1;
-    quizScores[quizId].correct += entry.correct ? 1 : 0;
+  document.body.appendChild(modal);
+  
+  // Close on overlay click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
   });
-  
-  // Convertir a array de scores
-  Object.values(quizScores).slice(0, 10).forEach(quiz => {
-    const score = Math.round((quiz.correct / quiz.total) * 100);
-    recentScores.push(score);
-  });
-  
-  const avgScore = recentScores.length > 0 
-    ? Math.round(recentScores.reduce((a, b) => a + b, 0) / recentScores.length)
-    : 0;
-  
-  return {
-    lastScore: lastScore,
-    avgScore: avgScore,
-    totalQuestions: history.length
-  };
-}
+};
 
+window.resetModuleStats = function(event, moduleName) {
+  event.stopPropagation();
+  
+  if (!confirm(`¿Seguro que quieres resetear todas las estadísticas de "${moduleName}"?`)) {
+    return;
+  }
+  
+  localStorage.removeItem(historyKey(moduleName));
+  localStorage.removeItem(seenKey(moduleName));
+  
+  // Re-render modules
+  renderModules(QUESTIONS_INDEX.modules);
+  
+  alert('Estadísticas reseteadas correctamente');
+};
 
 // === Question Selection ===
 function nextBatchFromModule(module, size) {
@@ -332,7 +427,6 @@ function startQuiz() {
 
   sessionQuestions = nextBatchFromModule(currentModule, batchSize);
 
-  // Ocultar todo y mostrar solo question screen
   document.querySelectorAll('.screen').forEach(s => {
     s.classList.remove('active');
     s.style.display = 'none';
@@ -350,7 +444,6 @@ function renderQuestion() {
   counterText.textContent = `Pregunta ${qIndex + 1} de ${sessionQuestions.length}`;
   questionText.textContent = q.question;
   
-  // Subtopic
   if (q.subtopic) {
     subtopicText.textContent = q.subtopic;
     subtopicText.style.display = 'inline-block';
@@ -358,7 +451,6 @@ function renderQuestion() {
     subtopicText.style.display = 'none';
   }
 
-  // Difficulty
   const diffMap = {
     'basic': { label: 'Básica', class: 'badge-difficulty', color: '#10b981' },
     'intermediate': { label: 'Media', class: 'badge-difficulty', color: '#f59e0b' },
@@ -370,11 +462,9 @@ function renderQuestion() {
   difficultyBadge.className = 'badge ' + diff.class;
   difficultyBadge.style.background = diff.color;
 
-  // Progress
   const pct = (qIndex / sessionQuestions.length) * 100;
   progressFill.style.width = `${pct}%`;
 
-  // Options
   optionsWrap.innerHTML = '';
   q.options.forEach((opt, idx) => {
     const btn = document.createElement('div');
@@ -422,7 +512,6 @@ function submitAnswer() {
   
   updateStreakDisplay();
 
-  // Visual feedback
   document.querySelectorAll('.option').forEach((el, i) => {
     el.classList.remove('selected');
     if (i === q.correct) el.classList.add('correct');
@@ -430,17 +519,14 @@ function submitAnswer() {
     el.classList.add('disabled');
   });
 
-  // Feedback message
   const prefix = isCorrect ? '¡Correcto! ' : 'Respuesta incorrecta. ';
   feedbackBox.textContent = prefix + (q.explanation || '');
   feedbackBox.className = 'feedback-box ' + (isCorrect ? 'correct' : 'incorrect');
 
-  // Sound
   if (soundEnabled) {
     isCorrect ? playCorrectSound() : playIncorrectSound();
   }
 
-  // Save history
   pushHistory(currentModule, {
     id: q.id,
     subtopic: q.subtopic || 'General',
@@ -473,7 +559,6 @@ function nextQuestion() {
 }
 
 function finishQuiz() {
-  // Ocultar todo y mostrar solo end screen
   document.querySelectorAll('.screen').forEach(s => {
     s.classList.remove('active');
     s.style.display = 'none';
@@ -484,21 +569,13 @@ function finishQuiz() {
   const total = sessionQuestions.length;
   const pct = Math.round((score.correct / total) * 100);
   
-  // Guardar el score de esta sesión en el primer elemento del historial
-  const key = historyKey(currentModule);
-  const history = JSON.parse(localStorage.getItem(key) || '[]');
-  if (history.length > 0) {
-    history[0].score = pct; // Agregar score al primer elemento
-    localStorage.setItem(key, JSON.stringify(history));
-  }
-  
   finalScore.textContent = `${pct}%`;
   performanceMessage.textContent = getPerformanceMessage(pct);
 
-  // Detailed results
   const agg = {};
   const lastIds = new Set(sessionQuestions.map(q => q.id));
-  const hist = history.filter(h => lastIds.has(h.id));
+  const hist = JSON.parse(localStorage.getItem(historyKey(currentModule)) || '[]')
+    .filter(h => lastIds.has(h.id));
 
   hist.forEach(h => {
     const s = h.subtopic || 'General';
@@ -518,8 +595,8 @@ function finishQuiz() {
 }
 
 function getPerformanceMessage(pct) {
-  if (pct >= 90) return '¡Excelente desempeño! 🎉';
-  if (pct >= 75) return '¡Muy bien! Sigue así 👏';
+  if (pct >= 90) return '¡Excelente desempeño!';
+  if (pct >= 75) return '¡Muy bien! Sigue así';
   if (pct >= 60) return 'Buen trabajo, vas por buen camino';
   return 'Sigue practicando los temas más débiles';
 }
@@ -535,6 +612,9 @@ function restart() {
   currentModule = null;
   startBtn.disabled = true;
   document.querySelectorAll('.module-card').forEach(c => c.classList.remove('selected'));
+  
+  // Re-render to update stats
+  renderModules(QUESTIONS_INDEX.modules);
 }
 
 // === Sound Effects ===
